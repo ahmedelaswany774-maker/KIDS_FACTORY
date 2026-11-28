@@ -109,3 +109,37 @@ def cinematic_clip(img_path, dur, out, idx=0, fps=30):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-t", f"{dur:.3f}", out]
     subprocess.run(cmd, check=True, capture_output=True)
     return out
+
+
+# ---------------------------------------------------------------- real motion (AI image-to-video)
+WAN_SPACE = "Upsampler/wan-2-2-14b-image-to-video"
+WAN_PROMPT = ("the characters move naturally and keep smiling, small gestures, gentle camera push in, "
+              "cartoon animation, smooth motion, no morphing, no text")
+
+
+def animate(img_path, out_path, action=None, duration=3.0, seed=20260, timeout=300):
+    """Animate one still with the free Wan 2.2 image-to-video space.
+
+    Needs HF_TOKEN (free Hugging Face account, fine-grained inference token). Returns out_path,
+    or None when the quota/auth is unavailable so the caller can fall back to a camera move.
+    """
+    tok = os.environ.get("HF_TOKEN", "").strip()
+    if not tok:
+        print("[cinema] HF_TOKEN not set - skipping AI motion")
+        return None
+    try:
+        from gradio_client import Client, handle_file
+        c = Client(WAN_SPACE, token=tok, verbose=False)
+        r = c.predict(input_image=handle_file(img_path),
+                      prompt=((action + ", ") if action else "") + WAN_PROMPT,
+                      steps=6, duration_seconds=float(duration), guidance_scale=1, guidance_scale_2=1,
+                      seed=seed, randomize_seed=False, end_image=None, api_name="/generate_video")
+        p = r[0]
+        if isinstance(p, dict):
+            p = p.get("path")
+        import shutil
+        shutil.copy(p, out_path)
+        return out_path
+    except Exception as e:
+        print("[cinema:wan]", str(e)[:160])
+        return None
