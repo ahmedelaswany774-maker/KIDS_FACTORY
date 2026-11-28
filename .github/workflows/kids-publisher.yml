@@ -2,7 +2,7 @@ name: Kids Story Publisher
 
 on:
   schedule:
-    - cron: "45 23 * * *"   # مرة واحدة يوميا 22:30 UTC = 00:30 القاهرة (حد الرفع اليومي)
+    - cron: "17 22 * * *"   # مرة واحدة يوميا 22:17 UTC = 00:17 القاهرة (حد الرفع اليومي)
   workflow_dispatch:
     inputs:
       dry_run:
