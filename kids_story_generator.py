@@ -10,7 +10,21 @@ EDU_SCENES = int(os.getenv("EDU_SCENES", "10"))
 # Fixed recurring cast: same words + same seed in every video = a recognizable brand look
 MASCOT_NAME, MASCOT = "لولو", "a small round fluffy orange baby fox cub with big friendly eyes and a blue scarf"
 FRIEND_NAME, FRIEND = "بيبو", "a cute round light-blue baby elephant with big ears and a yellow bow"
-MASCOT_SEED = int(os.getenv("MASCOT_SEED", "20260")) 
+MASCOT_SEED = int(os.getenv("MASCOT_SEED", "20260"))
+# Weekly content pillars (approved plan): weekday in Cairo time -> topic keywords. Mon=0 ... Sun=6
+PILLARS = {5: ("حروف الهجاء",), 6: ("الأرقام",), 0: ("الألوان", "الأشكال"), 1: ("قول من فضلك", "غسل اليدين", "المشاركة", "السلام", "ترتيب الألعاب", "المشاعر"),
+           2: ("أصوات الحيوانات", "الحيوانات", "الفواكه"), 3: ("حروف الهجاء", "الأرقام"), 4: ("الأرقام",)}
+def cairo_now():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Africa/Cairo"))
+def pillar_topics(topics):
+    force = os.getenv("FORCE_DAY")
+    day = int(force) if force not in (None, "") else cairo_now().weekday()
+    keys = PILLARS.get(day, ())
+    sel = [t for t in topics if any(k in t for k in keys)]
+    return sel or topics, day
+
 EDU_TOPICS = [
     "حروف الهجاء: الألف والباء والتاء والثاء (كل حرف مع كلمة وشيء يبدأ به)", "حروف الهجاء: الجيم والحاء والخاء والدال",
     "حروف الهجاء: الذال والراء والزاي والسين", "حروف الهجاء: الشين والصاد والضاد والطاء",
@@ -23,6 +37,11 @@ EDU_TOPICS = [
 THEMES = ["الصدق", "الكرم والمشاركة", "مساعدة الآخرين", "الشجاعة", "الصبر", "احترام الوالدين",
           "النظافة", "الصداقة", "الاعتذار", "عدم التنمر", "التعاون", "الشكر والامتنان", "حب الحيوانات", "الاجتهاد"]
 HEROES = ["أرنب صغير", "قطة", "فيل", "عصفورة", "سلحفاة", "طفل اسمه يوسف", "طفلة اسمها ليلى", "دب", "نحلة", "زرافة"]
+
+
+def uploaded_today():
+    today = cairo_now().strftime("%Y-%m-%d")
+    return any(h.get("date") == today for h in load_history())
 
 
 def load_history():
@@ -54,7 +73,7 @@ def generate_story():
 
 
 def record_history(data):
-    h = load_history(); h.append({"title": data["title"], "theme": data.get("_theme")}); save_history(h)
+    h = load_history(); h.append({"title": data["title"], "theme": data.get("_theme"), "date": cairo_now().strftime("%Y-%m-%d")}); save_history(h)
 
 
 def generate_edu():
@@ -62,7 +81,9 @@ def generate_edu():
     hist = load_history()
     used = [h["title"] for h in hist[-40:]]
     done_topics = [h.get("theme") for h in hist if h.get("theme")]
-    left = [t for t in EDU_TOPICS if t not in done_topics] or EDU_TOPICS
+    pool, _day = pillar_topics(EDU_TOPICS)
+    left = [t for t in pool if t not in done_topics] or pool
+    print("pillar day:", _day, "| topic:", left[0])
     topic = left[0] if os.getenv("EDU_ORDERED", "1") == "1" else random.choice(left)
     prompt = f"""اكتب أنشودة تعليمية قصيرة بالعربية الفصحى المبسطة لأطفال من 3 إلى 7 سنوات.
 موضوع الدرس: {topic}.

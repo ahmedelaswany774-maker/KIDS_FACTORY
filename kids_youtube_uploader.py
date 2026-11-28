@@ -11,6 +11,7 @@ import kids_media as km
 VOICE = os.getenv("TTS_VOICE", "ar-EG-SalmaNeural")   # or ar-SA-ZariyahNeural, ar-EG-ShakirNeural
 RATE = os.getenv("TTS_RATE", "-10%")                  # slower = better for kids
 PRIVACY = os.getenv("PRIVACY_STATUS", "public")       # public / unlisted / private
+PUBLISH_HOUR_UTC = os.getenv("PUBLISH_HOUR_UTC", "15")  # scheduled public release hour (15 UTC = 17:00 Cairo, after school); "" = publish immediately
 MAKE_SHORT = os.getenv("MAKE_SHORT", "true").lower() == "true"
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"  # build video, skip upload
 OUT = "out"
@@ -46,6 +47,14 @@ def upload(yt, path, title, desc, tags):
                         "defaultLanguage": "ar", "defaultAudioLanguage": "ar"},
             # selfDeclaredMadeForKids is the writable field (madeForKids is read-only and derived from it).
             "status": {"privacyStatus": PRIVACY, "selfDeclaredMadeForKids": True}}
+    if PRIVACY == "public" and PUBLISH_HOUR_UTC.strip():
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        at = now.replace(hour=int(PUBLISH_HOUR_UTC), minute=0, second=0, microsecond=0)
+        if at <= now + timedelta(minutes=30):
+            at += timedelta(days=1)
+        body["status"].update({"privacyStatus": "private", "publishAt": at.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        print("scheduled public release at", body["status"]["publishAt"])
     req = yt.videos().insert(part="snippet,status", body=body,
                              media_body=MediaFileUpload(path, chunksize=-1, resumable=True))
     resp = None
@@ -55,6 +64,9 @@ def upload(yt, path, title, desc, tags):
 
 
 def main():
+    import kids_story_generator as _k
+    if not DRY_RUN and _k.uploaded_today() and os.getenv("FORCE_UPLOAD") != "1":
+        print("one-upload-per-day guard: already uploaded today (Cairo date), skipping"); return
     d = generate_story()
     title, scenes, character = d["title"], d["scenes"], d.get("character", "a cute friendly cartoon character")
     tags = [t for t in d.get("tags", [])][:12] + ["قصص أطفال", "kids stories"]
